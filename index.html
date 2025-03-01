@@ -9,26 +9,20 @@
       margin: 0;
       overflow: hidden;
       background-color: black;
-      color: white;
       font-family: Arial, sans-serif;
+      color: white;
     }
     canvas {
       display: block;
     }
-    #ui {
-      position: absolute;
-      top: 10px;
-      left: 10px;
-      color: white;
-      font-size: 20px;
-    }
-    #startScreen, #gameOverScreen {
+    #startMenu, #pauseMenu, #gameOverMenu, #leaderboard {
       position: absolute;
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
       text-align: center;
       color: white;
+      display: none;
     }
     button {
       background-color: white;
@@ -39,19 +33,42 @@
       cursor: pointer;
       margin-top: 10px;
     }
+    #ui {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      font-size: 20px;
+    }
   </style>
 </head>
 <body>
-  <div id="ui">Score: 0 | Time: 60 | Health: 100</div>
-  <div id="startScreen">
+  <!-- 開始畫面 -->
+  <div id="startMenu">
     <h1>像素英雄之終極挑戰</h1>
     <button id="startButton">開始遊戲</button>
   </div>
-  <div id="gameOverScreen" style="display: none;">
+  <!-- 暫停畫面 -->
+  <div id="pauseMenu">
+    <h1>遊戲暫停</h1>
+    <button id="resumeButton">繼續遊戲</button>
+    <button id="restartButton">重新開始</button>
+    <button id="quitButton">結束遊戲</button>
+  </div>
+  <!-- 結束畫面 -->
+  <div id="gameOverMenu">
     <h1>遊戲結束</h1>
     <p id="finalScore"></p>
-    <button id="restartButton">重新開始</button>
+    <button id="restartGameButton">重新開始</button>
+    <button id="viewLeaderboardButton">查看排行榜</button>
   </div>
+  <!-- 排行榜 -->
+  <div id="leaderboard">
+    <h1>排行榜</h1>
+    <ul id="scoreList"></ul>
+    <button id="backToMenuButton">返回主選單</button>
+  </div>
+  <!-- 遊戲介面 -->
+  <div id="ui">Score: 0 | Time: 60 | Health: 100</div>
   <canvas id="gameCanvas"></canvas>
   <script>
     const canvas = document.getElementById('gameCanvas');
@@ -59,168 +76,123 @@
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
 
-    // Game variables
+    // 遊戲變數
     let score = 0;
     let timeLeft = 60;
     let health = 100;
-    let player = { x: canvas.width / 2, y: canvas.height - 50, size: 20 };
-    let bullets = [];
+    let level = 1;
     let enemies = [];
+    let bullets = [];
     let powerUps = [];
+    let boss = null;
+    let isPaused = false;
     let isGameRunning = false;
 
-    const startScreen = document.getElementById('startScreen');
-    const gameOverScreen = document.getElementById('gameOverScreen');
-    const startButton = document.getElementById('startButton');
-    const restartButton = document.getElementById('restartButton');
+    const startMenu = document.getElementById('startMenu');
+    const pauseMenu = document.getElementById('pauseMenu');
+    const gameOverMenu = document.getElementById('gameOverMenu');
+    const leaderboard = document.getElementById('leaderboard');
     const ui = document.getElementById('ui');
+
+    const startButton = document.getElementById('startButton');
+    const resumeButton = document.getElementById('resumeButton');
+    const restartButton = document.getElementById('restartButton');
+    const quitButton = document.getElementById('quitButton');
+    const restartGameButton = document.getElementById('restartGameButton');
+    const viewLeaderboardButton = document.getElementById('viewLeaderboardButton');
+    const backToMenuButton = document.getElementById('backToMenuButton');
+
     const finalScore = document.getElementById('finalScore');
+    const scoreList = document.getElementById('scoreList');
 
-    // Controls
-    document.addEventListener('mousemove', (e) => {
-      if (isGameRunning) player.x = e.clientX;
-    });
+    let leaderboardData = JSON.parse(localStorage.getItem('leaderboard')) || [];
 
-    document.addEventListener('click', () => {
-      if (isGameRunning) {
-        bullets.push({ x: player.x, y: player.y, size: 5, speed: 5 });
-      }
-    });
-
-    // Spawn enemies
-    function spawnEnemies(level = 1) {
-      for (let i = 0; i < level * 5; i++) {
-        enemies.push({
-          x: Math.random() * canvas.width,
-          y: Math.random() * canvas.height / 2,
-          size: 20,
-          speed: Math.random() * 2 + 1,
-          health: level,
-        });
-      }
-    }
-
-    // Spawn power-ups
-    function spawnPowerUps() {
-      if (Math.random() < 0.1) {
-        powerUps.push({
-          x: Math.random() * canvas.width,
-          y: Math.random() * canvas.height / 2,
-          size: 15,
-          type: Math.random() < 0.5 ? 'health' : 'attack',
-        });
-      }
-    }
-
-    // Game loop
-    function gameLoop() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      // Draw player
-      ctx.fillStyle = 'white';
-      ctx.fillRect(player.x - player.size / 2, player.y - player.size / 2, player.size, player.size);
-
-      // Draw bullets
-      ctx.fillStyle = 'red';
-      bullets.forEach((bullet, index) => {
-        bullet.y -= bullet.speed;
-        ctx.fillRect(bullet.x - bullet.size / 2, bullet.y - bullet.size / 2, bullet.size, bullet.size);
-
-        // Remove bullets out of bounds
-        if (bullet.y < 0) bullets.splice(index, 1);
-      });
-
-      // Draw enemies
-      ctx.fillStyle = 'green';
-      enemies.forEach((enemy, index) => {
-        enemy.y += enemy.speed;
-        ctx.fillRect(enemy.x - enemy.size / 2, enemy.y - enemy.size / 2, enemy.size, enemy.size);
-
-        // Check collision with bullets
-        bullets.forEach((bullet, bIndex) => {
-          if (
-            bullet.x < enemy.x + enemy.size &&
-            bullet.x + bullet.size > enemy.x &&
-            bullet.y < enemy.y + enemy.size &&
-            bullet.y + bullet.size > enemy.y
-          ) {
-            enemy.health -= 1;
-            bullets.splice(bIndex, 1);
-            if (enemy.health <= 0) {
-              enemies.splice(index, 1);
-              score += 10;
-            }
-          }
-        });
-
-        // Check collision with player
-        if (
-          player.x < enemy.x + enemy.size &&
-          player.x + player.size > enemy.x &&
-          player.y < enemy.y + enemy.size &&
-          player.y + player.size > enemy.y
-        ) {
-          health -= 10;
-          enemies.splice(index, 1);
-        }
-      });
-
-      // Draw power-ups
-      ctx.fillStyle = 'yellow';
-      powerUps.forEach((powerUp, index) => {
-        ctx.fillRect(powerUp.x - powerUp.size / 2, powerUp.y - powerUp.size / 2, powerUp.size, powerUp.size);
-
-        // Check collision with player
-        if (
-          player.x < powerUp.x + powerUp.size &&
-          player.x + player.size > powerUp.x &&
-          player.y < powerUp.y + powerUp.size &&
-          player.y + player.size > powerUp.y
-        ) {
-          if (powerUp.type === 'health') {
-            health += 20;
-          } else if (powerUp.type === 'attack') {
-            score += 50;
-          }
-          powerUps.splice(index, 1);
-        }
-      });
-
-      // Display UI
-      ui.innerText = `Score: ${score} | Time: ${Math.max(0, Math.floor(timeLeft))} | Health: ${health}`;
-
-      // Timer and game over condition
-      if (timeLeft > 0 && health > 0) {
-        timeLeft -= 0.016;
-        requestAnimationFrame(gameLoop);
-      } else {
-        isGameRunning = false;
-        gameOver();
-      }
-    }
-
-    function gameOver() {
-      finalScore.innerText = `Your final score is: ${score}`;
-      gameOverScreen.style.display = 'block';
-    }
-
-    // Start game
-    function startGame() {
+    // 初始化遊戲
+    function initializeGame() {
       score = 0;
       timeLeft = 60;
       health = 100;
-      bullets = [];
+      level = 1;
       enemies = [];
+      bullets = [];
       powerUps = [];
-      spawnEnemies();
+      boss = null;
       isGameRunning = true;
-      startScreen.style.display = 'none';
-      gameOverScreen.style.display = 'none';
+      isPaused = false;
+
+      startMenu.style.display = 'none';
+      pauseMenu.style.display = 'none';
+      gameOverMenu.style.display = 'none';
+      leaderboard.style.display = 'none';
+      ui.style.display = 'block';
+
+      spawnEnemies();
+      spawnPowerUps();
       gameLoop();
     }
 
-    startButton.addEventListener('click', startGame);
-    restartButton.addEventListener('click', startGame);
+    // 遊戲主迴圈
+    function gameLoop() {
+      if (isPaused || !isGameRunning) return;
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // 更新遊戲物件
+      updatePlayer();
+      updateBullets();
+      updateEnemies();
+      updatePowerUps();
+      updateUI();
+
+      // 判斷遊戲結束條件
+      if (health <= 0 || timeLeft <= 0) {
+        endGame();
+        return;
+      }
+
+      // 遊戲遞迴
+      requestAnimationFrame(gameLoop);
+    }
+
+    // 遊戲結束
+    function endGame() {
+      isGameRunning = false;
+      finalScore.innerText = `你的分數是：${score}`;
+      leaderboardData.push({ name: '玩家', score });
+      localStorage.setItem('leaderboard', JSON.stringify(leaderboardData));
+      gameOverMenu.style.display = 'block';
+    }
+
+    // 暫停/繼續遊戲
+    function togglePause() {
+      isPaused = !isPaused;
+      pauseMenu.style.display = isPaused ? 'block' : 'none';
+      if (!isPaused) gameLoop();
+    }
+
+    // 事件監聽
+    startButton.addEventListener('click', initializeGame);
+    resumeButton.addEventListener('click', togglePause);
+    restartButton.addEventListener('click', initializeGame);
+    quitButton.addEventListener('click', () => location.reload());
+    restartGameButton.addEventListener('click', initializeGame);
+    viewLeaderboardButton.addEventListener('click', () => {
+      gameOverMenu.style.display = 'none';
+      leaderboard.style.display = 'block';
+      updateLeaderboard();
+    });
+    backToMenuButton.addEventListener('click', () => {
+      leaderboard.style.display = 'none';
+      startMenu.style.display = 'block';
+    });
+
+    // 更新排行榜
+    function updateLeaderboard() {
+      scoreList.innerHTML = leaderboardData
+        .sort((a, b) => b.score - a.score)
+        .map((entry) => `<li>${entry.name}: ${entry.score}</li>`)
+        .join('');
+    }
   </script>
 </body>
 </html>
