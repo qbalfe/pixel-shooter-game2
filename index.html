@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>像素英雄之終極挑戰</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background-color: black;
+      color: white;
+      font-family: Arial, sans-serif;
+    }
+    canvas {
+      display: block;
+    }
+    #scoreboard {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      color: white;
+      font-size: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div id="scoreboard">Score: 0 | Time: 60</div>
+  <canvas id="gameCanvas"></canvas>
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    // Game variables
+    let score = 0;
+    let timeLeft = 60;
+    let player = { x: canvas.width / 2, y: canvas.height - 50, size: 20 };
+    let bullets = [];
+    let enemies = [];
+    let boss = null;
+
+    // Controls
+    document.addEventListener('mousemove', (e) => {
+      player.x = e.clientX;
+    });
+
+    document.addEventListener('click', () => {
+      bullets.push({ x: player.x, y: player.y, size: 5, speed: 5 });
+    });
+
+    // Spawn enemies
+    function spawnEnemies() {
+      for (let i = 0; i < 5; i++) {
+        enemies.push({
+          x: Math.random() * canvas.width,
+          y: Math.random() * canvas.height / 2,
+          size: 20,
+          health: 1,
+        });
+      }
+    }
+
+    // Game loop
+    function gameLoop() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Draw player
+      ctx.fillStyle = 'white';
+      ctx.fillRect(player.x - player.size / 2, player.y - player.size / 2, player.size, player.size);
+
+      // Draw bullets
+      ctx.fillStyle = 'red';
+      bullets.forEach((bullet, index) => {
+        bullet.y -= bullet.speed;
+        ctx.fillRect(bullet.x - bullet.size / 2, bullet.y - bullet.size / 2, bullet.size, bullet.size);
+
+        // Remove bullets out of bounds
+        if (bullet.y < 0) bullets.splice(index, 1);
+      });
+
+      // Draw enemies
+      ctx.fillStyle = 'green';
+      enemies.forEach((enemy, index) => {
+        ctx.fillRect(enemy.x - enemy.size / 2, enemy.y - enemy.size / 2, enemy.size, enemy.size);
+
+        // Check collision with bullets
+        bullets.forEach((bullet, bIndex) => {
+          if (
+            bullet.x < enemy.x + enemy.size &&
+            bullet.x + bullet.size > enemy.x &&
+            bullet.y < enemy.y + enemy.size &&
+            bullet.y + bullet.size > enemy.y
+          ) {
+            enemies.splice(index, 1);
+            bullets.splice(bIndex, 1);
+            score += 10;
+          }
+        });
+      });
+
+      // Display scoreboard
+      document.getElementById('scoreboard').innerText = `Score: ${score} | Time: ${timeLeft}`;
+
+      // Timer
+      if (timeLeft > 0) {
+        timeLeft -= 0.016;
+        requestAnimationFrame(gameLoop);
+      } else {
+        alert('Game Over! Your score: ' + score);
+      }
+    }
+
+    // Start game
+    spawnEnemies();
+    gameLoop();
+  </script>
+</body>
+</html>
