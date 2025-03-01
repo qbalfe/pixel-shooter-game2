@@ -15,17 +15,43 @@
     canvas {
       display: block;
     }
-    #scoreboard {
+    #ui {
       position: absolute;
       top: 10px;
       left: 10px;
       color: white;
       font-size: 20px;
     }
+    #startScreen, #gameOverScreen {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      color: white;
+    }
+    button {
+      background-color: white;
+      color: black;
+      border: none;
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+      margin-top: 10px;
+    }
   </style>
 </head>
 <body>
-  <div id="scoreboard">Score: 0 | Time: 60</div>
+  <div id="ui">Score: 0 | Time: 60 | Health: 100</div>
+  <div id="startScreen">
+    <h1>像素英雄之終極挑戰</h1>
+    <button id="startButton">開始遊戲</button>
+  </div>
+  <div id="gameOverScreen" style="display: none;">
+    <h1>遊戲結束</h1>
+    <p id="finalScore"></p>
+    <button id="restartButton">重新開始</button>
+  </div>
   <canvas id="gameCanvas"></canvas>
   <script>
     const canvas = document.getElementById('gameCanvas');
@@ -36,28 +62,52 @@
     // Game variables
     let score = 0;
     let timeLeft = 60;
+    let health = 100;
     let player = { x: canvas.width / 2, y: canvas.height - 50, size: 20 };
     let bullets = [];
     let enemies = [];
-    let boss = null;
+    let powerUps = [];
+    let isGameRunning = false;
+
+    const startScreen = document.getElementById('startScreen');
+    const gameOverScreen = document.getElementById('gameOverScreen');
+    const startButton = document.getElementById('startButton');
+    const restartButton = document.getElementById('restartButton');
+    const ui = document.getElementById('ui');
+    const finalScore = document.getElementById('finalScore');
 
     // Controls
     document.addEventListener('mousemove', (e) => {
-      player.x = e.clientX;
+      if (isGameRunning) player.x = e.clientX;
     });
 
     document.addEventListener('click', () => {
-      bullets.push({ x: player.x, y: player.y, size: 5, speed: 5 });
+      if (isGameRunning) {
+        bullets.push({ x: player.x, y: player.y, size: 5, speed: 5 });
+      }
     });
 
     // Spawn enemies
-    function spawnEnemies() {
-      for (let i = 0; i < 5; i++) {
+    function spawnEnemies(level = 1) {
+      for (let i = 0; i < level * 5; i++) {
         enemies.push({
           x: Math.random() * canvas.width,
           y: Math.random() * canvas.height / 2,
           size: 20,
-          health: 1,
+          speed: Math.random() * 2 + 1,
+          health: level,
+        });
+      }
+    }
+
+    // Spawn power-ups
+    function spawnPowerUps() {
+      if (Math.random() < 0.1) {
+        powerUps.push({
+          x: Math.random() * canvas.width,
+          y: Math.random() * canvas.height / 2,
+          size: 15,
+          type: Math.random() < 0.5 ? 'health' : 'attack',
         });
       }
     }
@@ -83,6 +133,7 @@
       // Draw enemies
       ctx.fillStyle = 'green';
       enemies.forEach((enemy, index) => {
+        enemy.y += enemy.speed;
         ctx.fillRect(enemy.x - enemy.size / 2, enemy.y - enemy.size / 2, enemy.size, enemy.size);
 
         // Check collision with bullets
@@ -93,28 +144,83 @@
             bullet.y < enemy.y + enemy.size &&
             bullet.y + bullet.size > enemy.y
           ) {
-            enemies.splice(index, 1);
+            enemy.health -= 1;
             bullets.splice(bIndex, 1);
-            score += 10;
+            if (enemy.health <= 0) {
+              enemies.splice(index, 1);
+              score += 10;
+            }
           }
         });
+
+        // Check collision with player
+        if (
+          player.x < enemy.x + enemy.size &&
+          player.x + player.size > enemy.x &&
+          player.y < enemy.y + enemy.size &&
+          player.y + player.size > enemy.y
+        ) {
+          health -= 10;
+          enemies.splice(index, 1);
+        }
       });
 
-      // Display scoreboard
-      document.getElementById('scoreboard').innerText = `Score: ${score} | Time: ${timeLeft}`;
+      // Draw power-ups
+      ctx.fillStyle = 'yellow';
+      powerUps.forEach((powerUp, index) => {
+        ctx.fillRect(powerUp.x - powerUp.size / 2, powerUp.y - powerUp.size / 2, powerUp.size, powerUp.size);
 
-      // Timer
-      if (timeLeft > 0) {
+        // Check collision with player
+        if (
+          player.x < powerUp.x + powerUp.size &&
+          player.x + player.size > powerUp.x &&
+          player.y < powerUp.y + powerUp.size &&
+          player.y + player.size > powerUp.y
+        ) {
+          if (powerUp.type === 'health') {
+            health += 20;
+          } else if (powerUp.type === 'attack') {
+            score += 50;
+          }
+          powerUps.splice(index, 1);
+        }
+      });
+
+      // Display UI
+      ui.innerText = `Score: ${score} | Time: ${Math.max(0, Math.floor(timeLeft))} | Health: ${health}`;
+
+      // Timer and game over condition
+      if (timeLeft > 0 && health > 0) {
         timeLeft -= 0.016;
         requestAnimationFrame(gameLoop);
       } else {
-        alert('Game Over! Your score: ' + score);
+        isGameRunning = false;
+        gameOver();
       }
     }
 
+    function gameOver() {
+      finalScore.innerText = `Your final score is: ${score}`;
+      gameOverScreen.style.display = 'block';
+    }
+
     // Start game
-    spawnEnemies();
-    gameLoop();
+    function startGame() {
+      score = 0;
+      timeLeft = 60;
+      health = 100;
+      bullets = [];
+      enemies = [];
+      powerUps = [];
+      spawnEnemies();
+      isGameRunning = true;
+      startScreen.style.display = 'none';
+      gameOverScreen.style.display = 'none';
+      gameLoop();
+    }
+
+    startButton.addEventListener('click', startGame);
+    restartButton.addEventListener('click', startGame);
   </script>
 </body>
 </html>
